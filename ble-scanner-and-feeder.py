@@ -214,6 +214,7 @@ def main():
     parser.add_argument("-p", "--port", type=str, default="/dev/ttyACM0")
     parser.add_argument("-b", "--baud", type=int, default=115200)
     parser.add_argument("-s", "--scan-only", action='store_true')
+    parser.add_argument("--verbose", action='store_true')
 
     args = parser.parse_args()
 
@@ -223,13 +224,15 @@ def main():
         print(e)
         sys.exit(1)
 
-    sio = io.TextIOWrapper(io.BufferedReader(port), encoding='ascii', newline='\r\n')
+    sio = io.TextIOWrapper(io.BufferedReader(port), encoding='ascii', newline=None)
 
     # Read and ignore first line as it may be partial
     line = sio.readline()
     while True:
         try:
             line = sio.readline()
+            if args.verbose:
+                print(line)
             line = line.rstrip()
             items = line.split(',')
 
