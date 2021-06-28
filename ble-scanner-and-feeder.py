@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
+import sys
 import serial
 import io
 import binascii
 import struct
 import time
-from influxdb import InfluxDBClient
+import argparse
+import traceback
 
 INFLUX_SERVER = ('localhost', 8086)
 
@@ -139,6 +141,12 @@ class BleAdvParser:
         self.service_data = {}
         self.ad_elements = [] # { 'ad_type: , 'ad_data': }
 
+    def dump(self):
+        for key, data in self.mfg_data.items():
+            print("MFG {:x}: {}".format(key, binascii.hexlify(data)))
+        for key, data in self.service_data.items():
+            print("SVC {:x}: {}".format(key, binascii.hexlify(data)))
+
     def parse_ad_elements(self):
         for e in self.ad_elements:
 
@@ -167,6 +175,7 @@ class BleAdvParser:
         self.parse_ad_elements()
 
 def send_sensor_data(points):
+    from influxdb import InfluxDBClient
     print(points)
     client = InfluxDBClient(host=INFLUX_SERVER[0], port=INFLUX_SERVER[1])
     client.switch_database('mydb')
@@ -201,10 +210,22 @@ def update_sensor_data(address, data):
 
 
 def main():
-    port = serial.Serial("/dev/ttyACM0", 115200, timeout=0.1)
-    sio = io.TextIOWrapper(io.BufferedRWPair(port, port), encoding='ascii', newline=None)
+    parser = argparse.ArgumentParser(description='BLE parser')
+    parser.add_argument("-p", "--port", type=str, default="/dev/ttyACM0")
+    parser.add_argument("-b", "--baud", type=int, default=115200)
+    parser.add_argument("-s", "--scan-only", action='store_true')
 
-    # Read and ignore first line
+    args = parser.parse_args()
+
+    try:
+        port = serial.Serial(args.port, args.baud, timeout=0.1)
+    except serial.serialutil.SerialException as e:
+        print(e)
+        sys.exit(1)
+
+    sio = io.TextIOWrapper(io.BufferedReader(port), encoding='ascii', newline='\r\n')
+
+    # Read and ignore first line as it may be partial
     line = sio.readline()
     while True:
         try:
@@ -224,23 +245,30 @@ def main():
             if RUUVI_MFG_ID in p.mfg_data:
                 data = parse_ruuvi_mfg_data(p.mfg_data[RUUVI_MFG_ID])
                 data['rssi'] = rssi
-                #print(data)
-                update_sensor_data(address, data)
+                if not args.scan_only:
+                    update_sensor_data(address, data)
+                else:
+                    print(data)
 
             if MIJIA_SVC_ID in p.service_data:
                 data = parse_mijia_sensor_data(p.service_data[MIJIA_SVC_ID])
                 data['rssi'] = rssi
-                #print(data)
-                update_sensor_data(address, data)
+                if not args.scan_only:
+                    update_sensor_data(address, data)
+                else:
+                    print(data)
 
-    #        print(data)
         except UnicodeDecodeError as e:
+            print(traceback.format_exc())
             pass
         except IndexError as e:
+            print(traceback.format_exc())
             pass
         except binascii.Error as e:
+            print(traceback.format_exc())
             pass
         except ValueError as e:
+            print(traceback.format_exc())
             pass
     
 if __name__ == "__main__":
