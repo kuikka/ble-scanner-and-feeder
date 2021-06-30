@@ -273,6 +273,11 @@ def main():
         except ValueError as e:
             print(traceback.format_exc())
             pass
+        except struct.error as e:
+            print("Could not parse advertisement data: {}".format(binascii.hexlify(data)))
+            print(traceback.format_exc())
+            pass
+
     
 if __name__ == "__main__":
     main()
